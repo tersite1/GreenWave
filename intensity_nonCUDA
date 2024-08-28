@@ -1,70 +1,66 @@
 import numpy as np
-import cv2
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from PIL import Image
 
 # Load the image
-image_path = '/mnt/data/272896DC-268D-49D1-80D0-53D6FD576CFA.png'
+image_path = '/Users/caz/Desktop/greenwae/target.png'  # Replace with your image path
 image = Image.open(image_path)
 image = np.array(image)
 
-# Extract only the RGB channels (ignore the alpha channel)
+# Extract only the RGB channels (ignore the alpha channel if present)
 rgb_image = image[:, :, :3]
 
-# Reshape the image to a 2D array of pixels
+# Reshape the image to a 2D array of pixels (each row is a pixel, each column is a color channel)
 rgb_pixels = rgb_image.reshape(-1, 3)
 
-# Perform K-means clustering on the new image
+# Perform K-means clustering on the pixel data
 kmeans = KMeans(n_clusters=3, random_state=42)
 kmeans.fit(rgb_pixels)
 clustered = kmeans.cluster_centers_[kmeans.labels_]
 
-# Reshape the clustered image back to the original image shape
-clustered_image = clustered.reshape(rgb_image.shape).astype(np.uint8)
+# Reshape the clustered data back to the original image shape
+rgb_clustered_image = clustered.reshape(rgb_image.shape).astype(np.uint8)
 
-# Identify the cluster corresponding to the green color (algal bloom)
+# Identify the cluster corresponding to the green color (assuming this is the algal bloom)
+# The assumption here is that the cluster with the lowest intensity sum corresponds to the darkest areas, which are likely algal bloom.
 cluster_centers = kmeans.cluster_centers_
+darkest_cluster_index = np.argmin(np.sum(cluster_centers, axis=1))
 
-# Find the cluster index closest to the green color (algal bloom)
-green = np.array([0, 255, 0])
-distances = np.linalg.norm(cluster_centers - green, axis=1)
-algal_bloom_cluster = np.argmin(distances)
+# Create a mask where the darkest cluster (presumed algal bloom) is set to True
+algal_bloom_mask = (kmeans.labels_.reshape(rgb_image.shape[:2]) == darkest_cluster_index)
 
-# Create the mask for the identified algal bloom cluster
-algal_bloom_mask = (kmeans.labels_.reshape(rgb_image.shape[:2]) == algal_bloom_cluster)
-
-# Initialize intensity mask with zeros
+# Initialize an intensity image with zeros
 algal_bloom_intensity = np.zeros_like(kmeans.labels_, dtype=float)
 
-# Assign intensity values based on cluster distance from the darkest cluster center
-distances_to_darkest = np.linalg.norm(rgb_pixels - cluster_centers[algal_bloom_cluster], axis=1)
-algal_bloom_intensity[kmeans.labels_ == algal_bloom_cluster] = distances_to_darkest[kmeans.labels_ == algal_bloom_cluster]
+# Calculate the distance of each pixel in the darkest cluster from the cluster center
+distances_to_darkest = np.linalg.norm(rgb_pixels - cluster_centers[darkest_cluster_index], axis=1)
+algal_bloom_intensity[kmeans.labels_ == darkest_cluster_index] = distances_to_darkest[kmeans.labels_ == darkest_cluster_index]
 
-# Reshape the intensity mask to the original image shape
+# Reshape the intensity data back to the original image shape
 algal_bloom_intensity_image = algal_bloom_intensity.reshape(rgb_image.shape[:2])
 
 # Apply a logarithmic function to the intensity values to emphasize strong areas and de-emphasize weak areas
 adjusted_intensity_log = np.log1p(algal_bloom_intensity_image)
 
 # Display the original and clustered images with the algal bloom detection and heatmap with logarithmic adjustment
-fig, axes = plt.subplots(1, 4, figsize=(20, 5), gridspec_kw={'width_ratios': [1, 1, 1, 1]})
+plt.figure(figsize=(20, 5))
 
-axes[0].imshow(rgb_image)
-axes[0].set_title("Original Image")
+plt.subplot(1, 4, 1)
+plt.imshow(rgb_image)
+plt.title("Original Image")
 
-axes[1].imshow(clustered_image)
-axes[1].set_title("K-means Clustered Image")
+plt.subplot(1, 4, 2)
+plt.imshow(rgb_clustered_image)
+plt.title("K-means Clustered Image")
 
-axes[2].imshow(algal_bloom_mask, cmap='gray')
-axes[2].set_title("Algal Bloom Detection")
+plt.subplot(1, 4, 3)
+plt.imshow(algal_bloom_mask, cmap='gray')
+plt.title("Algal Bloom Detection")
 
-im = axes[3].imshow(adjusted_intensity_log, cmap='viridis')
-axes[3].set_title("Intensity Chart", pad=20)
+plt.subplot(1, 4, 4)
+plt.imshow(adjusted_intensity_log, cmap='viridis')
+plt.title("Log-Adjusted Algal Bloom Intensity Heatmap")
 
-# Adjusting colorbar to match the height of the heatmap
-cbar = fig.colorbar(im, ax=axes[3], fraction=0.046, pad=0.04)
-cbar.ax.tick_params(labelsize=10)
-
-plt.tight_layout()
+plt.colorbar(label='Intensity (Log-Adjusted)')
 plt.show()
